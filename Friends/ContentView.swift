@@ -7,55 +7,24 @@
 import Foundation
 import SwiftUI
 
-struct Response: Codable {
-    var results: [User]
-}
-
-struct User: Codable, Identifiable {
-    var id: String
-    var name: String
-    var age: Int
-    var email: String
-    var about: String
-    var company: String
-    var isActive: Bool
-    var address: String
-    var registered: Date
-    var friends: [Friend]
-    
-    var nameInitials: String? {
-            if let range = name.range(of: " ") {
-                let initials = name[range.upperBound...]
-                let lastNameInitial = String(initials.prefix(1))
-                let firstNameInitial = name.prefix(1)
-                return "\(firstNameInitial)\(lastNameInitial)"
-            }
-            return "XX"
-        }
-    
-    
-    var formattedDate: String {
-            registered.formatted(date: .abbreviated, time: .omitted)
-        }
-}
-
-struct Friend: Codable, Identifiable {
-    var id: String
-    var name: String
-}
 
 struct ContentView: View {
-    @State private var results = [User]()
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.managedObjectContext) var moc
+    @FetchRequest(sortDescriptors: []) var cachedUsers: FetchedResults<CachedUser>
+    
+    @State private var users = [User]()
+    let networkManager = NetworkManager()
     
     var body: some View {
         NavigationStack{
             List{
-                ForEach($results) { $user in
-                    NavigationLink(destination: UserDetail(user: $user)) {
+                ForEach(cachedUsers) { user in
+                    NavigationLink(destination: UserDetail(user: user)) {
                         HStack {
                             Text(user.nameInitials ?? "XX")
                                 .padding()
-                                //.background(colorScheme == .dark ? .black : .white)
+                                .background(colorScheme == .dark ? .black : .white)
                                 .clipShape(Circle())
                                 .frame(width: 70)
                                 .overlay(
@@ -65,7 +34,7 @@ struct ContentView: View {
                                 .padding([.top, .bottom, .trailing], 5)
                             
                             VStack (alignment: .leading) {
-                                Text(user.name).bold()
+                                Text(user.wrappedName).bold()
                                 Text(user.isActive ? "Active" : "Offline").foregroundColor(user.isActive ? .green : .gray)
                             }
                         }
@@ -74,35 +43,38 @@ struct ContentView: View {
             }
             .navigationTitle("Users")
             .task {
-                if results.isEmpty {
-                    print("loading data")
-                    await loadData() }
+                if cachedUsers.isEmpty {
+                    print("loading from JSON")
+                    if let retrievedUsers = await networkManager.getUsers() {
+                        users = retrievedUsers
+                    }
+                }
+                    
+                    await MainActor.run {
+                        for user in users {
+                            let newUser = CachedUser(context: moc)
+                            newUser.name = user.name
+                            newUser.id = user.id
+                            newUser.isActive = user.isActive
+                            newUser.age = Int16(user.age)
+                            newUser.about = user.about
+                            newUser.email = user.email
+                            newUser.address = user.address
+                            newUser.company = user.company
+                            newUser.formattedDate = user.formattedDate
+                            
+                            for friend in user.friends {
+                                let newFriend = CachedFriend(context: moc)
+                                newFriend.id = friend.id
+                                newFriend.name = friend.name
+                                newFriend.user = newUser
+                            }
+                            
+                            try? moc.save()
+                        }
+                }
             }
         }
-    }
-    
-    func loadData() async {
-        let stringURL = "https://www.hackingwithswift.com/samples/friendface.json"
-        guard let url = URL(string: stringURL ) else { return }
-        let request = URLRequest(url: url)
-        
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            
-            guard let data = data else {
-                print("No data in response \(error?.localizedDescription ?? "No data response")")
-                    return
-                }
-            
-            do {
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                            
-                let decodedUsers = try decoder.decode([User].self, from: data)
-                self.results = decodedUsers
-            } catch let error {
-                print("error: \(error)")
-            }
-        }.resume()
     }
 }
 
@@ -110,5 +82,6 @@ struct ContentView: View {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+        
     }
 }

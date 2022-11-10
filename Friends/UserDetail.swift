@@ -7,9 +7,11 @@
 
 import SwiftUI
 
+
+
 struct UserDetail: View {
     @Environment(\.colorScheme) var colorScheme
-    @Binding var user: User
+    var user: CachedUser
     
     var body: some View {
         VStack{
@@ -27,31 +29,31 @@ struct UserDetail: View {
         
             List {
                 Section {
-                    Text("Registered: \(user.formattedDate)")
+                    Text("Registered: \(user.wrappedFormattedDate)")
                     Text("Age: \(user.age)")
-                    Text("Email: \(user.email)")
-                    Text("Address: \(user.address)")
-                    Text("Works for: \(user.company)")
+                    Text("Email: \(user.wrappedEmail)")
+                    Text("Address: \(user.wrappedAddress)")
+                    Text("Works for: \(user.wrappedCompany)")
                 } header: {
                     Text("Basic Info")
                 }
                 
                 Section {
-                    Text(user.about)
+                    Text(user.wrappedAbout)
                 } header: {
                     Text("About")
                 }
                 
                 Section {
-                    ForEach(user.friends) { friend in
-                        Text(friend.name)
+                    ForEach(user.friendsArray) { friend in
+                        Text(friend.wrappedName)
                     }
                 } header: {
                     Text("Friends")
                 }
             }
                 }
-                .navigationTitle(user.name)
+                .navigationTitle(user.wrappedName)
                 .navigationBarTitleDisplayMode(.inline)
             }
 }
